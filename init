@@ -35,6 +35,20 @@ def action(name)
   puts
 end
 
+def mount(type, device, dir, opts)
+  Dir.mkdir(dir) unless File.directory?(dir)
+  system('mount', '-t', type, device, dir, '-o', opts)
+end
+
+action 'Mounting virtual file-systems' do
+  mount('proc', 'proc', '/proc', 'nosuid,noexec,nodev')
+  mount('sysfs', 'sys', '/sys', 'nosuid,noexec,nodev')
+  mount('tmpfs', 'run', '/run', 'mode=0755,nosuid,nodev')
+  mount('devtmpfs', 'dev', '/dev', 'mode=0755,nosuid')
+  mount('devpts', 'devpts', '/dev/pts', 'mode=0620,gid=5,nosuid,noexec')
+  mount('tmpfs', 'shm', '/dev/shm', 'mode=1777,nosuid,nodev')
+end
+
 Process.spawn('agetty', 'tty1')
 
 def sys_reboot(cmd)
