@@ -66,6 +66,50 @@ def init
 end
 
 def shutdown
+  def killall
+
+    def allgone?()
+      Dir.glob('/proc/*').each do |e|
+        pid = File.basename(e).to_i
+        begin
+          next if pid < 2
+          # Is it a kernel process?
+          next if File.read('/proc/%i/cmdline' % pid).empty?
+        rescue Errno::ENOENT
+        end
+        return false
+      end
+      return true
+    end
+
+    def wait_until(timeout = 2, interval = 0.25)
+      start = Time.now
+      begin
+        break true if yield
+        sleep(interval)
+      end while (Time.now - start) < timeout
+    end
+
+    ok = false
+
+    action 'Sending SIGTERM to processes' do
+      Process.kill(:SIGTERM, -1)
+      ok = wait_until(10) { allgone? }
+      raise 'Failed' unless ok
+    end
+
+    return if ok
+
+    action 'Sending SIGKILL to processes' do
+      Process.kill(:SIGKILL, -1)
+      ok = wait_until(15) { allgone? }
+      raise 'Failed' unless ok
+    end
+
+  end
+
+  # Kill everything
+  killall
 
   action 'Unmounting real filesystems' do
     except = (NETFS + VIRTFS).map { |e| 'no' + e }.join(',')
