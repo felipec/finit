@@ -157,8 +157,19 @@ begin
 rescue Errno::ENOENT
 end
 
-Process.spawn('agetty', 'tty1')
-Process.spawn('slim', '-nodaemon')
+ARGV.each do |e|
+  case e
+  when 'emergency'
+    $emergency = true
+  end
+end
+
+if $emergency
+  Process.spawn('agetty', 'tty1', '--noclear', '--autologin', 'root')
+else
+  Process.spawn('agetty', 'tty1')
+  Process.spawn('slim', '-nodaemon')
+end
 
 def sys_reboot(cmd)
   map = { poweroff: 0x4321fedc, restart: 0x01234567, halt: 0xcdef0123 }
