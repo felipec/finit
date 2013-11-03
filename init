@@ -25,6 +25,16 @@ Signal.trap(:SIGCHLD) do
   end
 end
 
+def action(name)
+  print(name)
+  begin
+    yield
+  rescue => e
+    print(' (error: %s)' % e)
+  end
+  puts
+end
+
 Process.spawn('agetty', 'tty1')
 
 def sys_reboot(cmd)
