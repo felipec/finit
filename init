@@ -63,6 +63,10 @@ def init
     system('mount', '-a', '-t', except, '-O', 'no_netdev')
   end
 
+  action 'Manage temporary files' do
+    system('systemd-tmpfiles', '--create', '--remove', '--clean')
+  end
+
 end
 
 def shutdown
@@ -121,6 +125,11 @@ def shutdown
 end
 
 init
+
+begin
+  File.delete('/run/nologin')
+rescue Errno::ENOENT
+end
 
 Process.spawn('agetty', 'tty1')
 
