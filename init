@@ -14,10 +14,14 @@ when 'poweroff', 'restart', 'halt'
   do_cmd(ARGV[0].to_sym)
 end
 
+$daemons = {}
+
 Signal.trap(:SIGCHLD) do
   loop do
     begin
       status = Process.wait(-1, Process::WNOHANG)
+      key = $daemons.key(status)
+      $daemons.delete(key) if key
       break if status == nil
     rescue Errno::ECHILD
       break
@@ -164,11 +168,15 @@ ARGV.each do |e|
   end
 end
 
+def start(id, cmd)
+  $daemons[id] = Process.spawn(*cmd)
+end
+
 if $emergency
-  Process.spawn('agetty', 'tty1', '--noclear', '--autologin', 'root')
+  start('agetty1', %w[agetty tty1 --noclear --autologin root])
 else
-  Process.spawn('agetty', 'tty1')
-  Process.spawn('slim', '-nodaemon')
+  start('agetty1', %w[agetty tty1])
+  start('slim', %w[slim -nodaemon])
 end
 
 def sys_reboot(cmd)
