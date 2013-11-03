@@ -1,5 +1,16 @@
 #!/usr/bin/ruby
 
+Signal.trap(:SIGCHLD) do
+  loop do
+    begin
+      status = Process.wait(-1, Process::WNOHANG)
+      break if status == nil
+    rescue Errno::ECHILD
+      break
+    end
+  end
+end
+
 Process.spawn('agetty', 'tty1')
 
 sleep
