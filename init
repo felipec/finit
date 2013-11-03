@@ -49,6 +49,11 @@ action 'Mounting virtual file-systems' do
   mount('tmpfs', 'shm', '/dev/shm', 'mode=1777,nosuid,nodev')
 end
 
+action 'Setting hostname' do
+  hostname = File.read('/etc/hostname').chomp
+  File.write('/proc/sys/kernel/hostname', hostname)
+end
+
 Process.spawn('agetty', 'tty1')
 
 def sys_reboot(cmd)
