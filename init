@@ -1,5 +1,19 @@
 #!/usr/bin/ruby
 
+require 'socket'
+
+def do_cmd(*cmd)
+  ctl = UNIXSocket.open('/run/initctl')
+  ctl.puts(cmd.join(' '))
+  puts(ctl.readline.chomp)
+  exit
+end
+
+case ARGV[0]
+when 'poweroff', 'restart', 'halt'
+  do_cmd(ARGV[0].to_sym)
+end
+
 Signal.trap(:SIGCHLD) do
   loop do
     begin
@@ -13,4 +27,25 @@ end
 
 Process.spawn('agetty', 'tty1')
 
-sleep
+def sys_reboot(cmd)
+  map = { poweroff: 0x4321fedc, restart: 0x01234567, halt: 0xcdef0123 }
+  syscall(169, 0xfee1dead, 537993216, map[cmd])
+end
+
+def sys_sync
+  syscall(162)
+end
+
+begin
+  server = UNIXServer.open('/run/initctl')
+rescue Errno::EADDRINUSE
+  File.delete('/run/initctl')
+  retry
+end
+
+loop do
+  ctl = server.accept
+  cmd = ctl.readline.chomp.to_sym
+  sys_sync()
+  sys_reboot(cmd)
+end
