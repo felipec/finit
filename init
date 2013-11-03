@@ -12,6 +12,8 @@ end
 case ARGV[0]
 when 'poweroff', 'restart', 'halt'
   do_cmd(ARGV[0].to_sym)
+when 'status'
+  do_cmd(ARGV.shift.to_sym, *ARGV)
 end
 
 $daemons = {}
@@ -197,7 +199,13 @@ end
 
 loop do
   ctl = server.accept
-  cmd = ctl.readline.chomp.to_sym
-  shutdown
-  sys_reboot(cmd)
+  args = ctl.readline.chomp.split
+  cmd = args.shift.to_sym
+  case cmd
+  when :poweroff, :restart, :halt
+    shutdown
+    sys_reboot(cmd)
+  when :status
+    ctl.puts($daemons[args.first] ? 'ok' : 'dead')
+  end
 end
