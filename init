@@ -149,6 +149,7 @@ rescue Errno::ENOENT
 end
 
 Process.spawn('agetty', 'tty1')
+Process.spawn('slim', '-nodaemon')
 
 def sys_reboot(cmd)
   map = { poweroff: 0x4321fedc, restart: 0x01234567, halt: 0xcdef0123 }
