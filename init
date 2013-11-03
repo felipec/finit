@@ -58,6 +58,19 @@ def init
     File.write('/proc/sys/kernel/hostname', hostname)
   end
 
+  action 'Starting udev daemon' do
+    system('/usr/lib/systemd/systemd-udevd', '--daemon')
+  end
+
+  action 'Triggering udev uevents' do
+    system('udevadm', 'trigger', '--action=add', '--type=subsystems')
+    system('udevadm', 'trigger', '--action=add', '--type=devices')
+  end
+
+  action 'Waiting for udev uevents to be processed' do
+    system('udevadm', 'settle')
+  end
+
   action 'Mounting local filesystems' do
     except = NETFS.map { |e| 'no' + e }.join(',')
     system('mount', '-a', '-t', except, '-O', 'no_netdev')
@@ -110,6 +123,10 @@ def shutdown
       raise 'Failed' unless ok
     end
 
+  end
+
+  action 'Shutting down udev' do
+    system('udevadm', 'control', '--exit')
   end
 
   # Kill everything
