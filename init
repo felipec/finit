@@ -39,7 +39,16 @@ NETFS = %w[nfs nfs4 smbfs cifs codafs ncpfs shfs fuse fuseblk glusterfs davfs fu
 VIRTFS = %w[proc sysfs tmpfs devtmpfs devpts]
 
 def init
+  def is_mounted(path)
+    return false unless File.directory?(path)
+    path = File.realpath(path)
+    a = File.stat(path)
+    b = File.stat(path + '/..')
+    return (a.dev != b.dev) || (a.ino == b.ino)
+  end
+
   def mount(type, device, dir, opts)
+    return if is_mounted(dir)
     Dir.mkdir(dir) unless File.directory?(dir)
     system('mount', '-t', type, device, dir, '-o', opts)
   end
