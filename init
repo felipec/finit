@@ -5,8 +5,11 @@ require 'socket'
 def do_cmd(*cmd)
   ctl = UNIXSocket.open('/run/initctl')
   ctl.puts(cmd.join(' '))
-  puts(ctl.readline.chomp)
-  exit
+  loop do
+    r = ctl.readline.chomp
+    exit if r == 'done'
+    puts(r)
+  end
 end
 
 case ARGV[0]
@@ -221,6 +224,13 @@ loop do
     shutdown
     sys_reboot(cmd)
   when :status
-    ctl.puts($daemons[args.first] ? 'ok' : 'dead')
+    if args.empty?
+      $daemons.each do |key, value|
+        ctl.puts('%s: ok' % key)
+      end
+    else
+      ctl.puts($daemons[args.first] ? 'ok' : 'dead')
+    end
+    ctl.puts('done')
   end
 end
