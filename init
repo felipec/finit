@@ -35,6 +35,9 @@ def action(name)
   puts
 end
 
+NETFS = %w[nfs nfs4 smbfs cifs codafs ncpfs shfs fuse fuseblk glusterfs davfs fuse.glusterfs]
+VIRTFS = %w[proc sysfs tmpfs devtmpfs devpts]
+
 def mount(type, device, dir, opts)
   Dir.mkdir(dir) unless File.directory?(dir)
   system('mount', '-t', type, device, dir, '-o', opts)
@@ -52,6 +55,11 @@ end
 action 'Setting hostname' do
   hostname = File.read('/etc/hostname').chomp
   File.write('/proc/sys/kernel/hostname', hostname)
+end
+
+action 'Mounting local filesystems' do
+  except = NETFS.map { |e| 'no' + e }.join(',')
+  system('mount', '-a', '-t', except, '-O', 'no_netdev')
 end
 
 Process.spawn('agetty', 'tty1')
@@ -75,6 +83,10 @@ end
 loop do
   ctl = server.accept
   cmd = ctl.readline.chomp.to_sym
+  action 'Unmounting real filesystems' do
+    except = (NETFS + VIRTFS).map { |e| 'no' + e }.join(',')
+    system('umount', '-a', '-t', except, '-O', 'no_netdev')
+  end
   sys_sync()
   sys_reboot(cmd)
 end
