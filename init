@@ -187,14 +187,30 @@ def start(id, cmd)
   $daemons[id] = pid
 end
 
-def start_with_socket(id, stream, cmd)
+def start_with_socket(id, stream, cmd, managed: true)
 
-  server = TCPServer.new(stream)
+  if stream.is_a?(Integer)
+    server = TCPServer.new(stream)
+  else
+    server = UNIXServer.new(stream)
+  end
 
   Thread.new do
-    loop do
-      socket = server.accept
-      system(*cmd, :in => socket, :out => socket)
+    if managed
+      IO.select([server])
+      pid = fork do
+        env = {}
+        env['LISTEN_PID'] = $$.to_s
+        env['LISTEN_FDS'] = 1.to_s
+        Process.setsid()
+        exec(env, *cmd, 3 => server)
+      end
+      $daemons[id] = pid
+    else
+      loop do
+        socket = server.accept
+        system(*cmd, :in => socket, :out => socket)
+      end
     end
   end
 
@@ -211,7 +227,8 @@ else
   Dir.mkdir('/run/dbus', 0755) unless File.exists?('/run/dbus')
   start('dbus', %w[dbus-daemon --system --nofork --nopidfile])
 
-  start_with_socket('sshd', 22, %w[/usr/bin/sshd -i])
+  start_with_socket('sshd', 22, %w[/usr/bin/sshd -i], managed: false)
+  start_with_socket('uuid', '/run/uuidd/request', %w[uuidd --socket-activation --timeout 60])
 end
 
 def sys_reboot(cmd)
