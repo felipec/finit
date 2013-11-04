@@ -34,12 +34,40 @@ Signal.trap(:SIGCHLD) do
   end
 end
 
+def calc_columns
+  rows, cols = `stty size`.chomp.split.map(&:to_i)
+  $status_col = cols - 6
+end
+
+C_CLEAR = "\e[m" # clear text
+C_MAIN = "\e[;1m" # main text
+C_OTHER = "\e[1;34m" # prefix & brackets
+C_BUSY = "\e[;36m" # busy
+C_DONE = C_MAIN
+C_FAIL = "\e[1;31m" # failed
+
+def colorize(*args)
+  args + [C_CLEAR, " "]
+end
+
+def title(name)
+  print *colorize(C_OTHER, ":: ", C_MAIN, name)
+end
+
+def status(name)
+  color_status = eval "C_#{name}"
+  print "\e[", $status_col, 'G'
+  print *colorize(C_OTHER, '[', color_status, name, C_OTHER, ']')
+end
+
 def action(name)
-  print(name)
+  title name
+  status "BUSY"
   begin
-    yield
-  rescue => e
-    print(' (error: %s)' % e)
+    yield ? status("DONE") : status("FAIL")
+  rescue => msg
+    print msg
+    status("FAIL")
   end
   puts
 end
@@ -61,6 +89,8 @@ def init
     Dir.mkdir(dir) unless File.directory?(dir)
     system('mount', '-t', type, device, dir, '-o', opts)
   end
+
+  calc_columns
 
   action 'Mounting virtual file-systems' do
     mount('proc', 'proc', '/proc', 'nosuid,noexec,nodev')
@@ -88,6 +118,8 @@ def init
   action 'Waiting for udev uevents to be processed' do
     system('udevadm', 'settle')
   end
+
+  calc_columns
 
   if not File.directory?('/sys/class/net/lo')
     action 'Bringing up loopback interface' do
@@ -136,7 +168,6 @@ def shutdown
     action 'Sending SIGTERM to processes' do
       Process.kill(:SIGTERM, -1)
       ok = wait_until(10) { allgone? }
-      raise 'Failed' unless ok
     end
 
     return if ok
@@ -144,7 +175,6 @@ def shutdown
     action 'Sending SIGKILL to processes' do
       Process.kill(:SIGKILL, -1)
       ok = wait_until(15) { allgone? }
-      raise 'Failed' unless ok
     end
 
   end
