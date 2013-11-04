@@ -177,7 +177,9 @@ end
 if $emergency
   start('agetty1', %w[agetty tty1 --noclear --autologin root])
 else
-  start('agetty1', %w[agetty tty1])
+  (1..5).each do |n|
+    start("agetty#{n}", %W[agetty tty#{n}])
+  end
   start('slim', %w[slim -nodaemon])
 end
 
