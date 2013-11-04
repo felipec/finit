@@ -177,7 +177,11 @@ ARGV.each do |e|
 end
 
 def start(id, cmd)
-  $daemons[id] = Process.spawn(*cmd)
+  pid = fork do
+    Process.setsid()
+    exec(*cmd)
+  end
+  $daemons[id] = pid
 end
 
 if $emergency
