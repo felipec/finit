@@ -187,6 +187,19 @@ def start(id, cmd)
   $daemons[id] = pid
 end
 
+def start_with_socket(id, stream, cmd)
+
+  server = TCPServer.new(stream)
+
+  Thread.new do
+    loop do
+      socket = server.accept
+      system(*cmd, :in => socket, :out => socket)
+    end
+  end
+
+end
+
 if $emergency
   start('agetty1', %w[agetty tty1 --noclear --autologin root])
 else
@@ -197,6 +210,8 @@ else
 
   Dir.mkdir('/run/dbus', 0755) unless File.exists?('/run/dbus')
   start('dbus', %w[dbus-daemon --system --nofork --nopidfile])
+
+  start_with_socket('sshd', 22, %w[/usr/bin/sshd -i])
 end
 
 def sys_reboot(cmd)
