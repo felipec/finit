@@ -1,0 +1,17 @@
+#!/usr/bin/env ruby
+
+require 'socket'
+
+if ENV['LISTEN_PID'].to_i == $$
+  server = Socket.for_fd(3)
+  puts('from socket activation')
+else
+  server = TCPServer.new(2000)
+end
+
+count = 0
+
+loop do
+  s, _ = server.accept
+  s.puts('hi %s' % count += 1)
+end

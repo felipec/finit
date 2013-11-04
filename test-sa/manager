@@ -1,0 +1,41 @@
+#!/usr/bin/ruby
+
+require 'socket'
+
+$daemons = {}
+
+def start_with_socket(id, stream, cmd, managed: true)
+
+  if stream.is_a?(Integer)
+    server = TCPServer.new(stream)
+  else
+    server = UNIXServer.new(stream)
+  end
+
+  Thread.new do
+    if managed
+      IO.select([server])
+      pid = fork do
+        env = {}
+        env['LISTEN_PID'] = $$.to_s
+        env['LISTEN_FDS'] = 1.to_s
+        Process.setsid()
+        exec(env, *cmd, 3 => server)
+      end
+      $daemons[id] = pid
+    else
+      loop do
+        socket = server.accept
+        system(*cmd, :in => socket, :out => socket)
+      end
+    end
+  end
+
+end
+
+start_with_socket('test', 2000, './daemon')
+
+loop do
+  p $daemons
+  sleep(1)
+end

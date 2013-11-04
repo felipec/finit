@@ -1,0 +1,6 @@
+#!/usr/bin/env ruby
+
+require 'socket'
+
+s = TCPSocket.open('localhost', 2000)
+puts(s.readline)
