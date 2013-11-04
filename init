@@ -187,6 +187,9 @@ else
     start("agetty#{n}", %W[agetty tty#{n}])
   end
   start('slim', %w[slim -nodaemon])
+
+  Dir.mkdir('/run/dbus', 0755) unless File.exists?('/run/dbus')
+  start('dbus', %w[dbus-daemon --system --nofork --nopidfile])
 end
 
 def sys_reboot(cmd)
