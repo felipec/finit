@@ -34,6 +34,34 @@ Signal.trap(:SIGCHLD) do
   end
 end
 
+def get_mountinfo
+  mounts = {}
+  return {} unless File.exists?('/proc/self/mountinfo')
+  File.open('/proc/self/mountinfo').each do |l|
+    tmp = l.chomp.split
+    id, pid, major_minor, root, mount_point, mount_opts = tmp.shift(6)
+    mark = tmp.index('-')
+    tmp.shift(mark + 1)
+    fstype, _ = tmp
+    mounts[mount_point] = { :opts => mount_opts, :fs => fstype }
+  end
+  mounts
+end
+
+def get_fstab
+  fstab = {}
+  File.open('/etc/fstab').each do |l|
+    case l
+    when /^#/
+    when /^$/
+    else
+      dev, dir, type, opts = l.chomp.split
+      fstab[dir] = true
+    end
+  end
+  fstab
+end
+
 def calc_columns
   rows, cols = `stty size`.chomp.split.map(&:to_i)
   $status_col = cols - 6
@@ -106,6 +134,25 @@ def init
     File.write('/proc/sys/kernel/hostname', hostname)
   end
 
+  if not File.exists?('/run/initramfs/root-fsck')
+    mounts = get_mountinfo
+
+    # remount root ro to allow for fsck later on, we remount now to make sure
+    # nothing can open files rw on root which would block a remount
+    if mounts['/'][:opts] != 'ro'
+      action "Mounting root read-only" do
+        system('mount', '/', '-o', 'remount,ro')
+      end
+    end
+  end
+
+  # log all console messages
+  system('bootlogd', '-p', '/run/bootlogd.pid')
+
+  action 'Adjusting system time and setting kernel time zone' do
+    system('hwclock', '--systz')
+  end
+
   action 'Starting udev daemon' do
     system('/usr/lib/systemd/systemd-udevd', '--daemon')
   end
@@ -115,11 +162,20 @@ def init
     system('udevadm', 'trigger', '--action=add', '--type=devices')
   end
 
+  action 'Loading user-specified modules' do
+    system('/usr/lib/systemd/systemd-modules-load')
+  end
+
   action 'Waiting for udev uevents to be processed' do
     system('udevadm', 'settle')
   end
 
   calc_columns
+
+  # this must be done after udev has loaded the KMS modules
+  action 'Configuring virtual consoles' do
+    system('/usr/lib/systemd/systemd-vconsole-setup')
+  end
 
   if not File.directory?('/sys/class/net/lo')
     action 'Bringing up loopback interface' do
@@ -127,14 +183,71 @@ def init
     end
   end
 
+  if File.executable?('/sbin/fsck')
+    action 'Checking filesystems' do
+      cmds = File.read('/proc/cmdline').chomp.split
+      if File.file?('/forcefsck') or cmds.member?('forcefsck')
+        force = true
+      elsif File.file?('/fastboot') or cmds.member?('fastboot')
+        next
+      end
+      except = NETFS.map { |e| 'no' + e }.join(',')
+      cmd = [ 'fsck', '-A', '-T', '-a', '-t', except + ',noopts=_netdev' ]
+      cmd += [ '--', '-f' ] if force
+      system(*cmd, 1 => File::NULL)
+      $?.exitstatus <= 1
+    end
+  end
+
+  action 'Remounting root and virtual file-systems' do
+    system('/usr/lib/systemd/systemd-remount-fs')
+  end
+
   action 'Mounting local filesystems' do
     except = NETFS.map { |e| 'no' + e }.join(',')
     system('mount', '-a', '-t', except, '-O', 'no_netdev')
   end
 
+  action 'Activating swap' do
+    system('swapon', '-a')
+  end
+
+  action 'Initializing random seed' do
+    system('/usr/lib/systemd/systemd-random-seed', 'load')
+  end
+
   action 'Manage temporary files' do
     system('systemd-tmpfiles', '--create', '--remove', '--clean')
   end
+
+  action 'Saving dmesg log' do
+    begin
+      restricted = File.read('/proc/sys/kernel/dmesg_restrict').to_i == 1
+    rescue Errno::ENOENT
+      restricted = false
+    end
+
+    File.open('/var/log/dmesg.log', 'w', restricted ? 0600 : 0644) do |f|
+      f.write `dmesg`
+    end
+  end
+
+  # Load sysctl config files
+  system('/usr/lib/systemd/systemd-sysctl')
+
+  # Load additional binary formats
+  dir = '/proc/sys/fs/binfmt_misc'
+  if not is_mounted(dir)
+    fstab = get_fstab()
+
+    if fstab[dir]
+      system('mount', '/proc/sys/fs/binfmt_misc')
+    else
+      system('mount', '-t', 'binfmt_misc', 'binfmt', '/proc/sys/fs/binfmt_misc')
+    end
+  end
+
+  system('/usr/lib/systemd/systemd-binfmt')
 
 end
 
@@ -179,6 +292,14 @@ def shutdown
 
   end
 
+  system('/etc/rc.local.shutdown') if File.executable?('/etc/rc.local.shutdown')
+
+  action 'Saving random seed' do
+    system('/usr/lib/systemd/systemd-random-seed', 'save')
+  end
+
+  system('halt', '-w')
+
   action 'Shutting down udev' do
     system('udevadm', 'control', '--exit')
   end
@@ -189,6 +310,10 @@ def shutdown
   action 'Unmounting real filesystems' do
     except = (NETFS + VIRTFS).map { |e| 'no' + e }.join(',')
     system('umount', '-a', '-t', except, '-O', 'no_netdev')
+  end
+
+  action 'Deactivating swap' do
+    system('swapoff', '-a')
   end
 
   sys_sync()
@@ -208,6 +333,8 @@ ARGV.each do |e|
     $emergency = true
   end
 end
+
+system('/etc/rc.local') if File.executable?('/etc/rc.local')
 
 def start(id, cmd)
   pid = fork do
