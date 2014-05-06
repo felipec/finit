@@ -9,11 +9,18 @@ def do_cmd(*cmd)
   exit
 end
 
-case ARGV[0]
-when 'poweroff', 'restart', 'halt'
-  do_cmd(ARGV[0].to_sym)
-when 'status'
-  do_cmd(ARGV.shift.to_sym, *ARGV)
+if $$ != 1
+  case ARGV[0]
+  when 'poweroff', 'restart', 'halt'
+    do_cmd(ARGV[0].to_sym)
+  when 'status'
+    do_cmd(ARGV.shift.to_sym, *ARGV)
+  when 'test'
+    map = { poweroff: 0x4321fedc, restart: 0x01234567, halt: 0xcdef0123 }
+    syscall(169, 0xfee1dead, 537993216, map[:poweroff])
+  else
+    exit 1
+  end
 end
 
 $daemons = {}
